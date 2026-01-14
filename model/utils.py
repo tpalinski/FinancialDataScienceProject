@@ -34,7 +34,7 @@ def load_data(path="data/dataset.csv"):
         price_series = df[col]
         labels = __label_markers(price_series.values)
         asset_df = pd.DataFrame({
-            "price": price_series,
+            "close": price_series,
             "label": labels
         }, index=price_series.index)
         asset_df.dropna(inplace=True)

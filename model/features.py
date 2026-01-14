@@ -41,3 +41,6 @@ def extract_donchian_channel(df: pd.DataFrame):
     dc = ta.volatility.DonchianChannel(df["high"], df["low"], df["close"])
     return np.column_stack((dc.donchian_channel_hband().to_numpy(), dc.donchian_channel_mband().to_numpy(), dc.donchian_channel_lband().to_numpy()))
 
+def extract_log_returns(df: pd.DataFrame, period = 1):
+    return np.log(df / df.shift(period))
+

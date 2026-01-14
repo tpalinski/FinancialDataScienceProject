@@ -1,12 +1,14 @@
 import numpy as np
 import pandas as pd
 import backtrader as bt
+import math
 
 def visualize_dataset(df: pd.DataFrame):
     class LabelData(bt.feeds.PandasData):
         lines = ('label',)
         params = (
-            ('close', 'price'),
+            ('close', 'close'),
+            ('open', 'close'),
             ('label', 'label'),
         )
 
@@ -17,17 +19,14 @@ def visualize_dataset(df: pd.DataFrame):
 
         def __init__(self) -> None:
             super().__init__()
-            # self.macd = bt.ind.MACD(self.data.close)
+            self.macd = bt.ind.MACD(self.data.close)
         def next(self):
             label = self.data.label[0]
-            print(self.broker.get_cash())
             if not self.position and label > 0.5:
                 cash = self.broker.get_cash()
                 price = self.data.close[0]
                 size = cash / price / 2
                 if size > 0:
-                    print(f"price: {price}")
-                    print(f"size: {size}")
                     self.buy(size=size)
             elif self.position and label < -0.5:
                 self.close()
@@ -35,76 +34,63 @@ def visualize_dataset(df: pd.DataFrame):
     cerebro = bt.Cerebro()
     cerebro.adddata(data)
     cerebro.addstrategy(LabelStrategy)
-    cerebro.broker.set_cash(100000)
+    cerebro.broker.set_cash(100)
     cerebro.run()
-    cerebro.plot(open=False, high=False, low=False, volume=False)
+    cerebro.plot(high=False, low=False, volume=False)
 
-def simulate_model(df: pd.DataFrame, model):
+def simulate_model(df: pd.DataFrame, model, title="ETH, test set"):
     class LabelData(bt.feeds.PandasData):
         lines = ('label',)
-        params = (('label', -1),)
+        params = (
+            ('close', 'close'),
+            ('open', 'close'),
+            ('label', 'label'),
+        )
 
     data = LabelData(dataname=df)
 
-    class DonchianChannels(bt.Indicator):
-        '''
-        Params Note:
-          - `lookback` (default: -1)
-            If `-1`, the bars to consider will start 1 bar in the past and the
-            current high/low may break through the channel.
-            If `0`, the current prices will be considered for the Donchian
-            Channel. This means that the price will **NEVER** break through the
-            upper/lower channel bands.
-        '''
+    class LogReturn(bt.Indicator):
+        lines = ('logret',)
+        params = dict(period=1)
+        plotinfo = dict(subplot=True, plot=True)
 
-        alias = ('DCH', 'DonchianChannel',)
+        def __init__(self):
+            pass  # no calculations here, do in next()
 
-        lines = ('dcm', 'dch', 'dcl',)  # dc middle, dc high, dc low
-        params = dict(
-            period=20,
-            lookback=-1,  # consider current bar or not
-        )
-
-        plotinfo = dict(subplot=False)  # plot along with data
-        plotlines = dict(
-            dcm=dict(ls='--'),  # dashed line
-            dch=dict(_samecolor=True),  # use same color as prev line (dcm)
-            dcl=dict(_samecolor=True),  # use same color as prev line (dch)
-        )
-
-    def __init__(self):
-        hi, lo = self.data.high, self.data.low
-        if self.p.lookback:  # move backwards as needed
-            hi, lo = hi(self.p.lookback), lo(self.p.lookback)
-
-        self.l.dch = bt.ind.Highest(hi, period=self.p.period)
-        self.l.dcl = bt.ind.Lowest(lo, period=self.p.period)
-        self.l.dcm = (self.l.dch + self.l.dcl) / 2.0  # avg of the above
+        def next(self):
+            if len(self.data) <= self.p.period:
+                self.lines.logret[0] = 0.0
+            else:
+                prev_close = self.data.close[-self.p.period]
+                if prev_close != 0:
+                    self.lines.logret[0] = np.log(self.data.close[0] / prev_close)
+                else:
+                    self.lines.logret[0] = 0.0
 
     class ModelStrategy(bt.Strategy):
+        plotinfo = dict(plotname=title)
 
         def __init__(self):
             self.model = model
 
             self.macd = bt.ind.MACD(self.data.close)
-
             self.bb = bt.ind.BollingerBands(self.data.close, period=20, devfactor=2, plot=False)
             self.bb_close = bt.ind.BollingerBands(self.data.close, period=7, devfactor=2, plot=False)
-            self.acdec = bt.ind.AccelerationDecelerationOscillator()
+            self.logret = LogReturn(self.data, period=20, plot=False)
+            self.logret5 = LogReturn(self.data, period=5, plot=False)
 
         def next(self):
             if len(self) < 30:
                 return
             features = np.array([
-                self.data.close[0],
-                self.data.volume[0],
+                self.logret[0],
+                self.logret5[0],
                 self.bb.lines.top[0],
                 self.bb.lines.bot[0],
                 self.bb_close.lines.top[0],
                 self.bb_close.lines.bot[0],
                 self.macd.macd[0],
                 self.macd.signal[0],
-                self.acdec[0],
             ]).reshape(1, -1)
 
             probs = self.model.predict(features)[0] 
