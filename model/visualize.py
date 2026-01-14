@@ -5,7 +5,10 @@ import backtrader as bt
 def visualize_dataset(df: pd.DataFrame):
     class LabelData(bt.feeds.PandasData):
         lines = ('label',)
-        params = (('label', -1),)
+        params = (
+            ('close', 'price'),
+            ('label', 'label'),
+        )
 
     data = LabelData(dataname=df)
 
@@ -14,24 +17,27 @@ def visualize_dataset(df: pd.DataFrame):
 
         def __init__(self) -> None:
             super().__init__()
-            self.macd = bt.ind.MACD(self.data.close)
+            # self.macd = bt.ind.MACD(self.data.close)
         def next(self):
             label = self.data.label[0]
-            if not self.position and label == 1.0:
+            print(self.broker.get_cash())
+            if not self.position and label > 0.5:
                 cash = self.broker.get_cash()
                 price = self.data.close[0]
-                size = int(cash / price)
+                size = cash / price / 2
                 if size > 0:
+                    print(f"price: {price}")
+                    print(f"size: {size}")
                     self.buy(size=size)
-            elif self.position and label == -1.0:
+            elif self.position and label < -0.5:
                 self.close()
         
     cerebro = bt.Cerebro()
     cerebro.adddata(data)
     cerebro.addstrategy(LabelStrategy)
-    cerebro.broker.set_cash(1000)
+    cerebro.broker.set_cash(100000)
     cerebro.run()
-    cerebro.plot()
+    cerebro.plot(open=False, high=False, low=False, volume=False)
 
 def simulate_model(df: pd.DataFrame, model):
     class LabelData(bt.feeds.PandasData):

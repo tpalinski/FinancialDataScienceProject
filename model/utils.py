@@ -1,5 +1,5 @@
 import numpy as np
-import yfinance as yf
+import pandas as pd
 
 def __label_markers(X: np.ndarray, window = 7, tp = 0.03, tl = 0.02):
     """
@@ -27,24 +27,17 @@ def __label_markers(X: np.ndarray, window = 7, tp = 0.03, tl = 0.02):
     labels[-window:] = np.nan
     return labels
 
-def load_data(indexes: list):
-    res = {}
-    for index in indexes:
-        data = yf.download([index], interval="1d", period="10y")
-        X = data["Close"].to_numpy().ravel()
-        y = __label_markers(X)
-        data["Label"] = y
-        data.dropna(inplace=True)
-        data.columns = ['_'.join(map(str, col)) if isinstance(col, tuple) else col for col in data.columns]
-        data.rename(columns={
-            f'Open_{index}': 'open',
-            f'High_{index}': 'high',
-            f'Low_{index}': 'low',
-            f'Close_{index}': 'close',
-            f'Volume_{index}': 'volume',
-            'Label_': 'label'
-        }, inplace=True)
-        res[index] = data
-    return res
-
+def load_data(path="data/dataset.csv"):
+    df = pd.read_csv(path, sep=";", parse_dates=["Date"], index_col="Date")
+    series_dict = {}
+    for col in df.columns:
+        price_series = df[col]
+        labels = __label_markers(price_series.values)
+        asset_df = pd.DataFrame({
+            "price": price_series,
+            "label": labels
+        }, index=price_series.index)
+        asset_df.dropna(inplace=True)
+        series_dict[col] = asset_df
+    return series_dict
 
