@@ -56,6 +56,7 @@ def simulate_multidata(
 def simulate_finetuned(
         index: Index = Index.ETH,
         output_shap: bool = False,
+        validation_days: int = 100,
         test_days: int = 200, 
         largest_window: int = 50, 
         epochs: int = 300,
